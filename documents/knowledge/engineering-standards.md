@@ -1,6 +1,6 @@
 # Quy ước kỹ thuật
 
-Mặc định cho repo nền tảng và repo TaskLite. Thay đổi quy ước nào thì ghi ADR.
+Mặc định cho cả repo, gồm nền tảng và TaskLite (`apps/tasklite/`). Thay đổi quy ước nào thì ghi ADR.
 
 ## 1. Công nghệ
 
@@ -16,7 +16,7 @@ Mặc định cho repo nền tảng và repo TaskLite. Thay đổi quy ước n�
 | CI | GitHub Actions; kết quả test và scan lưu làm artifact |
 | Sơ đồ | Mermaid trong Markdown, theo C4 (Context, Container, Component) và sequence |
 
-Một solution `.slnx` ở gốc mỗi repo. Mỗi app/service có project test riêng đặt cạnh nó.
+Một solution `.slnx` cho nền tảng ở gốc repo; TaskLite có `TaskLite.slnx` riêng trong `apps/tasklite/`. Mỗi app/service có project test riêng đặt cạnh nó.
 
 ## 2. HTTP, định danh và cấu hình
 

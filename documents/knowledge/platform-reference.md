@@ -10,14 +10,18 @@ Nhận một ticket Jira đã được chấp thuận và đưa nó qua: phân t
 
 Ba cổng người bắt buộc: **duyệt yêu cầu**, **duyệt PR**, **duyệt Production**.
 
-## 2. Hai repo
+## 2. Một repo, hai vùng (quyết định D4)
 
-| Repo | Vai trò | Ghi chú |
+| Vùng | Vai trò | Ghi chú |
 |---|---|---|
-| `tasklite` (dự kiến `D:\AI engineer\tasklite` + GitHub) | Bãi tập: ứng dụng nghiệp vụ nhỏ mà agent làm việc trên đó | Dựng mới ở P0. Có CI và branch protection. Agent chỉ mở PR vào đây |
-| `build-workflows-phase2` (repo này) | Nền tảng AI delivery, thứ đang học | Chứa cả backlog thực hành và đáp án đánh giá |
+| `apps/tasklite/` | Bãi tập: ứng dụng nghiệp vụ nhỏ mà agent làm việc trên đó | Dựng ở P0. Agent chỉ được sửa trong thư mục này, qua PR |
+| Phần còn lại của repo `build-workflows-phase2` | Nền tảng AI delivery, thứ đang học | Chứa cả backlog thực hành và đáp án đánh giá |
 
-Hai lý do phải tách: agent làm việc trong TaskLite không được sửa code hay CI của nền tảng, và không được nhìn thấy đáp án `expected` của backlog (nếu thấy thì kết quả đánh giá vô nghĩa).
+Hai ranh giới vẫn phải giữ dù chung repo: agent không được sửa code hay CI của nền tảng, và không được nhìn thấy đáp án `expected` trong `practice/backlog/` (nếu thấy thì kết quả đánh giá vô nghĩa). Cách giữ (chốt bằng ADR trước `s5-2`):
+- Worktree của agent dùng sparse checkout chỉ có `apps/tasklite/`, hoặc runner chỉ mount thư mục đó.
+- Công cụ đọc file của agent (`ctx-3`) chặn đường dẫn ngoài `apps/tasklite/`.
+- CI từ chối PR nhánh `ai/*` có thay đổi ngoài `apps/tasklite/`; CODEOWNERS cho phần nền tảng.
+- CI của TaskLite chạy theo path filter `apps/tasklite/**`.
 
 ## 3. Thành phần và ranh giới trách nhiệm (roadmap §3.2)
 
@@ -37,6 +41,7 @@ Hai lý do phải tách: agent làm việc trong TaskLite không được sửa 
 
 | Thư mục | Thành phần | Bước tạo | Ghi chú |
 |---|---|---|---|
+| `apps/tasklite/` | TaskLite (bãi tập) | `s0a` | `TaskLite.slnx`, `src/TaskLite.Api`, `web/`; test, Dockerfile của TaskLite cũng đặt trong đây |
 | `apps/workflow-api/` | Workflow API | `s1` | PostgreSQL, EF Core, state machine |
 | `services/agent-service/` | LLM layer, ContextBuilder, AgentRuntime, các agent | `s2`–`s5`, `ctx`, `mag` | Gọi LLM qua gateway từ `gw` |
 | `services/docs-mcp/` | MCP server chỉ đọc tài liệu | `s3-3` | MCP C# SDK |
@@ -46,9 +51,10 @@ Hai lý do phải tách: agent làm việc trong TaskLite không được sửa 
 | `agents/<role>/prompts/` | Prompt có version | `s2-3` trở đi | |
 | `contracts/schemas/`, `contracts/events/` | Schema và sự kiện | `s2-3`, `s5-1`, `mag-2` | |
 | `tests/evaluation/` | Eval harness và bộ ca | `s2-5` trở đi | |
-| `practice/backlog/` | Backlog ticket thực hành + `expected` | `s0a-2` | Không đưa sang repo TaskLite |
-| `infra/docker/`, `infra/terraform/` | Hạ tầng | `s0b-2`, `s13-2` | |
+| `practice/backlog/` | Backlog ticket thực hành + `expected` | `s0a-2` | Agent không được đọc (xem mục 2) |
+| `infra/docker/`, `infra/terraform/` | Hạ tầng của nền tảng | `s1-3` (Compose cho PostgreSQL), `s13-2` | Docker của TaskLite (`s0b-2`) nằm trong `apps/tasklite/` |
 | `docs/` | Tài liệu hệ thống | Mọi bước | Xem mục 9 |
+| `docs/approved/` | Tài liệu yêu cầu đã duyệt, nguồn duy nhất docs-mcp được đọc | `s3-3` | Chỉ thêm qua PR có người duyệt |
 
 ## 5. Trạng thái lần chạy (roadmap gợi ý, user thiết kế lại ở `s1-1`)
 
@@ -123,6 +129,7 @@ Lệnh được phép của Developer (`s5-2`): `dotnet build`, `dotnet test`, `
 | `docs/security/` `llm-data-policy.md`, `runner.md`, `quality-gates.md`, `ai-usage-policy.md`, `threat-model.md` | `s2-6`, `s7-1`, `s10-1`, `s12-1`, `s15-1` |
 | `docs/runbooks/` `model-change.md`, `rollback-rollforward.md`, `team-operating-procedure.md`, `incident-response.md`, 5 runbook phục hồi | `s2-7`, `s11-3`, `s12-4`, `s15-3`, `s17-3` |
 | Bằng chứng: `docs/poc-evidence.md`, `docs/pilot-evidence.md`, `docs/production-readiness.md` | `s6-3`, `s12-4`, `s17-4` |
+| `docs/approved/` (tài liệu yêu cầu đã duyệt cho docs-mcp) | `s3-3` |
 | Kết quả kiểm thử: `tests/evaluation/` (ba, tools, injection, security), `tests/security/runner.md`, `tests/reliability/queue.md` | `s2-4`, `s3-4`, `s4-3`, `s7-4`, `s8-5`, `s15-4` |
 
 ## 10. ADR mà plan yêu cầu

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskLite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at 10% 20%, #fdf4f5 0%, #f7f8fc 40%, #edf1f9 100%);
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --border-color: #e2e8f0;
+      --border-light: #f1f5f9;
+      --todo-bg: #f1f5f9;
+      --todo-text: #475569;
+      --inprogress-bg: #fef3c7;
+      --inprogress-text: #d97706;
+      --done-bg: #dcfce7;
+      --done-text: #15803d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-gradient);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 20px;
+      color: var(--text-main);
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Decorative stars like the reference image */
+    .sparkle {
+      position: absolute;
+      color: #f472b6;
+      opacity: 0.35;
+      pointer-events: none;
+      user-select: none;
+    }
+    .sparkle-1 { top: 25px; left: 35px; font-size: 28px; }
+    .sparkle-2 { top: 75px; left: 45px; font-size: 36px; color: #c084fc; }
+    .sparkle-3 { bottom: 35px; right: 40px; font-size: 34px; color: #f472b6; }
+    .sparkle-4 { bottom: 85px; right: 55px; font-size: 26px; color: #c084fc; }
+
+    .dashboard-card {
+      background: var(--card-bg);
+      width: 100%;
+      max-width: 1040px;
+      border-radius: 24px;
+      box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      padding: 36px 44px;
+      position: relative;
+      z-index: 10;
+    }
+
+    /* Header section */
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .title-area h1 {
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-main);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .count-badge {
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: #f1f5f9;
+      color: #64748b;
+      padding: 2px 10px;
+      border-radius: 20px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 4px;
+    }
+
+    /* Controls bar */
+    .controls {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      background: #f8fafc;
+      padding: 14px 18px;
+      border-radius: 16px;
+      border: 1px solid var(--border-light);
+      margin-bottom: 24px;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .control-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .control-input, .control-select {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      color: var(--text-main);
+      font-weight: 500;
+      outline: none;
+      transition: all 0.2s ease;
+      min-width: 140px;
+    }
+
+    .control-input:focus, .control-select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    /* Error alert box */
+    .error-box {
+      background-color: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+      border-radius: 14px;
+      padding: 14px 18px;
+      margin-bottom: 22px;
+      font-size: 0.9rem;
+      display: none;
+      box-shadow: 0 2px 6px rgba(239, 68, 68, 0.06);
+    }
+
+    .error-box strong {
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .error-box ul {
+      margin: 8px 0 0 20px;
+    }
+
+    /* Tasks table */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin-bottom: 36px;
+      border-radius: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      text-align: left;
+    }
+
+    thead th {
+      padding: 12px 16px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      background: #ffffff;
+    }
+
+    tbody tr {
+      transition: background 0.15s ease;
+    }
+
+    tbody tr:hover {
+      background: #fcfdfe;
+    }
+
+    tbody td {
+      padding: 16px;
+      font-size: 0.92rem;
+      color: var(--text-main);
+      border-bottom: 1px solid var(--border-light);
+      vertical-align: middle;
+    }
+
+    .task-id {
+      font-weight: 600;
+      color: #94a3b8;
+      font-size: 0.85rem;
+    }
+
+    .task-title-cell {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* Status badge pill */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .status-todo {
+      background: var(--todo-bg);
+      color: var(--todo-text);
+    }
+    .status-todo::before { background: #64748b; }
+
+    .status-inprogress {
+      background: var(--inprogress-bg);
+      color: var(--inprogress-text);
+    }
+    .status-inprogress::before { background: #f59e0b; }
+
+    .status-done {
+      background: var(--done-bg);
+      color: var(--done-text);
+    }
+    .status-done::before { background: #22c55e; }
+
+    /* Assignee pill / avatar */
+    .assignee-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+    }
+
+    .avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #e0e7ff;
+      color: #4338ca;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-transform: uppercase;
+    }
+
+    .empty-val {
+      color: #cbd5e1;
+    }
+
+    /* Create Task Section */
+    .create-card {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 18px;
+      padding: 24px 28px;
+    }
+
+    .create-card h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .create-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 2fr 1.2fr 1fr auto;
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    @media (max-width: 820px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .form-input {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.92rem;
+      font-family: inherit;
+      color: var(--text-main);
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    .btn-submit {
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 0.92rem;
+      font-family: inherit;
+      border: none;
+      border-radius: 10px;
+      padding: 11px 22px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn-submit:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
+    }
+
+    .btn-submit:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <!-- Decorative stars in background -->
+  <div class="sparkle sparkle-1">✦</div>
+  <div class="sparkle sparkle-2">✦</div>
+  <div class="sparkle sparkle-3">✦</div>
+  <div class="sparkle sparkle-4">✦</div>
+
+  <div class="dashboard-card">
+    <div class="dashboard-header">
+      <div class="title-area">
+        <h1>
+          TaskLite
+          <span class="count-badge" id="task-count">0 tasks</span>
+        </h1>
+        <p class="subtitle">Manage all tasks and team progress within this project</p>
+      </div>
+    </div>
+
+    <!-- Error message alert -->
+    <div id="error" data-testid="error" class="error-box"></div>
+
+    <!-- Controls (User ID & Project Selector) -->
+    <div class="controls">
+      <div class="control-group">
+        <label for="user-id">User ID</label>
+        <input type="text" id="user-id" data-testid="user-id" class="control-input" placeholder="e.g. alice" />
+      </div>
+      <div class="control-group">
+        <label for="project-select">Project</label>
+        <select id="project-select" data-testid="project-select" class="control-select"></select>
+      </div>
+    </div>
+
+    <!-- Tasks Table -->
+    <div class="table-container">
+      <table id="task-table" data-testid="task-table">
+        <thead>
+          <tr>
+            <th style="width: 60px;">Id</th>
+            <th>Title</th>
+            <th style="width: 140px;">Status</th>
+            <th style="width: 160px;">Assignee</th>
+            <th style="width: 130px;">Due date</th>
+          </tr>
+        </thead>
+        <tbody id="task-tbody">
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Create Task Form -->
+    <div class="create-card">
+      <h2>Create Task</h2>
+      <p>Add a new work item to the current project</p>
+      <form id="create-task-form" novalidate>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="task-title">Title</label>
+            <input type="text" id="task-title" data-testid="task-title" class="form-input" placeholder="What needs to be done?" />
+          </div>
+          <div class="form-group">
+            <label for="task-assignee">Assignee</label>
+            <input type="text" id="task-assignee" data-testid="task-assignee" class="form-input" placeholder="Member ID (optional)" />
+          </div>
+          <div class="form-group">
+            <label for="task-due">Due date</label>
+            <input type="date" id="task-due" data-testid="task-due" class="form-input" />
+          </div>
+          <button type="submit" id="task-submit" data-testid="task-submit" class="btn-submit">
+            <span>+</span> Create Task
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

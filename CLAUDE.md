@@ -41,29 +41,33 @@ Dự án học AI engineering của user. Mục tiêu: tự xây các lớp lõi
 
 | # | Ngày | Quyết định |
 |---|---|---|
-| D1 | 2026-11-09 | TaskLite dựng mới từ đầu trong repo riêng (dự kiến `D:\AI engineer\tasklite` + GitHub). Không tái sử dụng code phase 1; phase 1 chỉ để tham khảo bài học |
+| D1 | 2026-11-09 | TaskLite dựng mới từ đầu. Không tái sử dụng code phase 1; phase 1 chỉ để tham khảo bài học. (Phần "repo riêng" của D1 đã được thay bằng D4) |
 | D2 | 2026-11-09 | Repo này theo bố cục `apps/` + `services/` của plan (xem bên dưới); đã xóa thư mục `src/` trống |
 | D3 | 2026-11-09 | Phase 2 dùng Jira project và Confluence space mới do user tạo; không dùng project `SM` và space `SMLOG` của phase 1 |
+| D4 | 2026-11-09 | TaskLite nằm trong repo này tại `apps/tasklite/` (một repo duy nhất), thay cho repo riêng `D:\AI engineer\tasklite`. Hệ quả: agent làm việc trên toàn repo sẽ thấy `practice/backlog/` (đáp án) và code nền tảng; trước `s5-2` phải giới hạn agent chỉ trong `apps/tasklite/` (sparse checkout của worktree hoặc mount riêng thư mục vào runner) và ghi ADR |
 
 Khi `docs/decisions/` có ADR, chuyển các quyết định này thành ADR và chỉ giữ link ở đây.
 
 ## Việc còn mở
 
-- Key của Jira project và Confluence space mới (user tạo; ghi vào đây khi có).
+- Jira: site `huynhngocsonuit2000.atlassian.net`, project **Tasklite**, key `TAS` (tạo 2026-11-09). Đã import 14 ticket: TAS-1..3 = ambiguous-01..03, TAS-4..8 = clear-01..05, TAS-9..10 = conflicting-01..02, TAS-11 = injection-01, TAS-12 = schema-01, TAS-13..14 = security-01..02 (label `practice` + id ticket). Key Confluence space: chưa có.
 - Cách dùng Confluence trong phase 2 (plan chưa có việc riêng). Đề xuất: nhật ký từng lần chạy và trang tóm tắt bằng chứng, thêm vào plan ở `s6`. Hỏi user trước khi thêm.
 - Nhà cung cấp LLM và model chính (`s2-1`); cloud cho P3 (`s13-1`).
-- Đẩy repo này lên GitHub hay không; chưa `git init`.
+- Đẩy repo này lên GitHub hay không (đã `git init`, commit đầu `init document`).
+- Cách cô lập agent khỏi `practice/backlog/` và code nền tảng khi TaskLite chung repo (D4); chốt bằng ADR trước `s5-2`.
+- Folder cũ `D:\AI engineer\tasklite` (có 3 commit của Antigravity) vẫn còn; user xóa khi không cần lịch sử đó.
 
 ## Trạng thái hiện tại
 
-- 2026-11-09: plan 90 việc, chưa bắt đầu. Repo chỉ có `CLAUDE.md` và `documents/`. Việc kế tiếp: `s0a-1` (dựng TaskLite).
+- 2026-11-09: xong mốc `s0a` (Antigravity làm theo `documents/antigravity-task/01.TaskLite.md`, Claude đã chạy kiểm tra: đủ 4 tiêu chí `done`). Code ở `apps/tasklite/`, backlog 14 ticket ở `practice/backlog/`, đã lên Jira `TAS` (14 To Do, label tách đúng, tiếng Việt đúng dấu). Còn 3 lỗi nhỏ chưa sửa: so sánh user id lúc phân biệt hoa thường lúc không (`GET /projects/{id}` khác `GET /projects`), status dạng số `"1"` được chấp nhận, `createdAt` đọc lại từ SQLite mất `Z`. Việc kế tiếp: `s0b-1` (test).
 - Mẫu cập nhật: `YYYY-MM-DD: xong <mốc>; ADR mới <số>; việc kế tiếp <id>`.
 
 ## Bố cục repo
 
-Hai repo: **TaskLite** (bãi tập; agent đọc ticket và mở PR vào đây) và **repo này** (nền tảng). Tách để agent không sửa được code và CI của nền tảng, và không thấy đáp án `expected` của backlog.
+Một repo (D4): nền tảng và TaskLite (bãi tập; agent đọc ticket và mở PR sửa `apps/tasklite/`). Agent không được sửa ngoài `apps/tasklite/` và không được thấy `practice/backlog/`: giới hạn bằng worktree/runner, CI kiểm tra đường dẫn thay đổi, CODEOWNERS.
 
 ```
+apps/tasklite/            s0a  TaskLite: API .NET (src/TaskLite.Api), web tĩnh (web/), TaskLite.slnx riêng
 apps/workflow-api/        s1   Workflow API, state machine (PostgreSQL)
 services/agent-service/   s2–s5, ctx, mag   LLM layer, ContextBuilder, AgentRuntime, các agent
 services/docs-mcp/        s3   MCP server chỉ đọc tài liệu
@@ -71,10 +75,10 @@ services/runner/          s7   runner cách ly
 agents/<role>/prompts/    prompt có version
 contracts/schemas|events/ JSON schema, sự kiện giữa agent
 workflows/n8n/            export workflow n8n (instance riêng của phase 2)
-practice/backlog/         backlog ticket thực hành + expected (không đưa sang TaskLite)
+practice/backlog/         backlog ticket thực hành + expected (agent không được đọc)
 tests/evaluation/         eval harness, bộ ca, kết quả
 infra/docker|terraform/
-docs/architecture|decisions|runbooks|security/
+docs/architecture|decisions|runbooks|security|approved/
 documents/                study plan, roadmap gốc, tài liệu kiến thức (tài liệu học, không phải tài liệu hệ thống)
 ```
 

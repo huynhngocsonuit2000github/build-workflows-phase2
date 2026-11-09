@@ -1,0 +1,99 @@
+@baseUrl = http://localhost:5200
+
+### 0. Health check (không cần header)
+GET {{baseUrl}}/health
+
+### 1. Tạo project bằng alice, có thêm thành viên bob
+POST {{baseUrl}}/projects
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "name": "Project Alpha",
+  "memberIds": ["bob"]
+}
+
+### 2. Liệt kê project của alice
+GET {{baseUrl}}/projects
+X-User-Id: alice
+
+### 3.1. Tạo task có assignee
+POST {{baseUrl}}/projects/1/tasks
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "title": "Task assigned to Bob",
+  "assignee": "bob",
+  "dueDate": "2026-11-20"
+}
+
+### 3.2. Tạo task không có assignee
+POST {{baseUrl}}/projects/1/tasks
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "title": "Task unassigned"
+}
+
+### 4. Liệt kê task
+GET {{baseUrl}}/projects/1/tasks
+X-User-Id: alice
+
+### 5.1. Đổi status sang InProgress
+PATCH {{baseUrl}}/projects/1/tasks/1/status
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "status": "InProgress"
+}
+
+### 5.2. Đổi status sang Done
+PATCH {{baseUrl}}/projects/1/tasks/1/status
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "status": "Done"
+}
+
+### 6.1. Lỗi: thiếu X-User-Id -> 401
+GET {{baseUrl}}/projects
+
+### 6.2. Lỗi: mallory không phải thành viên đọc task -> 403
+GET {{baseUrl}}/projects/1/tasks
+X-User-Id: mallory
+
+### 6.3. Lỗi: project không tồn tại -> 404
+GET {{baseUrl}}/projects/999/tasks
+X-User-Id: alice
+
+### 6.4. Lỗi: title rỗng -> 400
+POST {{baseUrl}}/projects/1/tasks
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "title": ""
+}
+
+### 6.5. Lỗi: assignee không phải thành viên -> 400
+POST {{baseUrl}}/projects/1/tasks
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "title": "Task for unknown user",
+  "assignee": "mallory"
+}
+
+### 6.6. Lỗi: status Archived -> 400
+PATCH {{baseUrl}}/projects/1/tasks/1/status
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "status": "Archived"
+}
