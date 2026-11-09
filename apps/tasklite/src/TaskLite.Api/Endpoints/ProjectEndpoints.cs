@@ -33,7 +33,7 @@ public static class ProjectEndpoints
             });
         }
 
-        var memberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        var memberSet = new HashSet<string>(StringComparer.Ordinal)
         {
             user.Id
         };
@@ -95,7 +95,7 @@ public static class ProjectEndpoints
                 detail: $"Project {projectId} not found.");
         }
 
-        if (!project.MemberIds.Contains(user.Id, StringComparer.OrdinalIgnoreCase))
+        if (!project.MemberIds.Contains(user.Id, StringComparer.Ordinal))
         {
             return Results.Problem(
                 statusCode: StatusCodes.Status403Forbidden,

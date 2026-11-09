@@ -40,11 +40,19 @@ app.UseCors();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+}
 
-    using var scope = app.Services.CreateScope();
+using (var scope = app.Services.CreateScope())
+{
     var db = scope.ServiceProvider.GetRequiredService<TaskLiteDbContext>();
     await db.Database.MigrateAsync();
-    await DevSeeder.SeedAsync(db);
+
+    var shouldSeed = app.Environment.IsDevelopment() ||
+                     app.Configuration.GetValue<bool>("Seed:DemoData");
+    if (shouldSeed)
+    {
+        await DevSeeder.SeedAsync(db);
+    }
 }
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

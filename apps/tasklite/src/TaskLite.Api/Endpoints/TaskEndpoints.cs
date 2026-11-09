@@ -34,7 +34,7 @@ public static class TaskEndpoints
                 detail: $"Project {projectId} not found."));
         }
 
-        if (!project.MemberIds.Contains(user.Id, StringComparer.OrdinalIgnoreCase))
+        if (!project.MemberIds.Contains(user.Id, StringComparer.Ordinal))
         {
             return (null, Results.Problem(
                 statusCode: StatusCodes.Status403Forbidden,
@@ -67,7 +67,7 @@ public static class TaskEndpoints
         }
 
         string? assignee = string.IsNullOrWhiteSpace(request.Assignee) ? null : request.Assignee.Trim();
-        if (assignee != null && !project!.MemberIds.Contains(assignee, StringComparer.OrdinalIgnoreCase))
+        if (assignee != null && !project!.MemberIds.Contains(assignee, StringComparer.Ordinal))
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
@@ -182,8 +182,10 @@ public static class TaskEndpoints
                 detail: $"Task {taskId} not found in project {projectId}.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Status) ||
-            !Enum.TryParse<TaskItemStatus>(request.Status.Trim(), ignoreCase: true, out var newStatus) ||
+        var statusStr = request.Status?.Trim();
+        if (string.IsNullOrEmpty(statusStr) ||
+            int.TryParse(statusStr, out _) ||
+            !Enum.TryParse<TaskItemStatus>(statusStr, ignoreCase: true, out var newStatus) ||
             !Enum.IsDefined(newStatus))
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
