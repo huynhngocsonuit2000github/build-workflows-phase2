@@ -1,0 +1,8 @@
+**/.git
+**/.vs
+**/bin
+**/obj
+**/tests
+**/*.db*
+**/TestResults
+**/node_modules
