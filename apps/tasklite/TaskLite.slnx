@@ -1,3 +1,6 @@
-﻿<Solution>
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/TaskLite.Tests/TaskLite.Tests.csproj" />
+  </Folder>
   <Project Path="src/TaskLite.Api/TaskLite.Api.csproj" />
 </Solution>
