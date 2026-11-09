@@ -2,20 +2,29 @@ name: tasklite-ci
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
     paths:
       - 'apps/tasklite/**'
       - '.github/workflows/tasklite-ci.yml'
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
     paths:
       - 'apps/tasklite/**'
       - '.github/workflows/tasklite-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tasklite-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,16 +33,15 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          include-prerelease: true
 
       - name: Restore dependencies
         run: dotnet restore apps/tasklite/TaskLite.slnx
 
       - name: Build solution
-        run: dotnet build apps/tasklite/TaskLite.slnx --no-restore -warnaserror
+        run: dotnet build apps/tasklite/TaskLite.slnx --no-restore -c Release -warnaserror
 
       - name: Run tests
-        run: dotnet test apps/tasklite/TaskLite.slnx --no-build --logger trx --results-directory TestResults
+        run: dotnet test apps/tasklite/TaskLite.slnx --no-build -c Release --logger trx --results-directory TestResults
 
       - name: Upload test results
         if: always()
@@ -46,6 +54,7 @@ jobs:
     name: Docker Build
     needs: build-test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
