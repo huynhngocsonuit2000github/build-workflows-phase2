@@ -9,6 +9,35 @@ TaskLite là một ứng dụng quản lý công việc tối giản cung cấp 
 
 ---
 
+## Cấu trúc thư mục
+
+```
+apps/tasklite/
+├── TaskLite.slnx                 # solution: gồm API và project test
+├── docker-compose.yml            # chạy api + web bằng Docker
+├── .dockerignore
+├── .config/dotnet-tools.json     # công cụ dotnet-ef (migration)
+├── src/TaskLite.Api/             # API .NET (minimal API)
+│   ├── Program.cs                # cấu hình app, CORS, migrate, các endpoint chung
+│   ├── Auth/CurrentUser.cs       # đọc user từ header X-User-Id
+│   ├── Domain/                   # Project, TaskItem, TaskItemStatus
+│   ├── Data/                     # TaskLiteDbContext (EF Core + SQLite), DevSeeder
+│   ├── Endpoints/                # ProjectEndpoints, TaskEndpoints, Contracts (DTO)
+│   ├── Migrations/               # migration EF Core
+│   ├── TaskLite.Api.http         # request mẫu để thử API
+│   ├── appsettings*.json         # cấu hình (connection string, CORS)
+│   └── Dockerfile                # image API (multi-stage)
+├── tests/TaskLite.Tests/         # test tích hợp xUnit + WebApplicationFactory
+└── web/                          # trang web tĩnh (HTML + JS thuần)
+    ├── index.html, app.js
+    ├── config.json               # địa chỉ API, đọc lúc chạy
+    └── Dockerfile                # image nginx cho web
+```
+
+Ở gốc repo: `.github/workflows/tasklite-ci.yml` là CI của TaskLite.
+
+---
+
 ## 1. Khởi chạy cục bộ (Local Development)
 
 ### Khởi chạy API
