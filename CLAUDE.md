@@ -53,13 +53,15 @@ Khi `docs/decisions/` có ADR, chuyển các quyết định này thành ADR và
 - Jira: site `huynhngocsonuit2000.atlassian.net`, project **Tasklite**, key `TAS` (tạo 2026-11-09). Đã import 14 ticket: TAS-1..3 = ambiguous-01..03, TAS-4..8 = clear-01..05, TAS-9..10 = conflicting-01..02, TAS-11 = injection-01, TAS-12 = schema-01, TAS-13..14 = security-01..02 (label `practice` + id ticket). Key Confluence space: chưa có.
 - Cách dùng Confluence trong phase 2 (plan chưa có việc riêng). Đề xuất: nhật ký từng lần chạy và trang tóm tắt bằng chứng, thêm vào plan ở `s6`. Hỏi user trước khi thêm.
 - Nhà cung cấp LLM và model chính (`s2-1`); cloud cho P3 (`s13-1`).
-- Đẩy repo này lên GitHub hay không (đã `git init`, commit đầu `init document`).
+- GitHub: repo `huynhngocsonuit2000github/build-workflows-phase2` (đang Public, nên `practice/backlog/` đọc được công khai; chuyển Private nếu muốn giữ kín đáp án). Ruleset trên `main`: bắt buộc PR, required check `Build & Test`, chặn force push; push thẳng `main` bị chặn, làm trên nhánh rồi mở PR.
+- ADR 0001 đang `Proposed`; user đọc xong thì đổi thành `Accepted`.
 - Cách cô lập agent khỏi `practice/backlog/` và code nền tảng khi TaskLite chung repo (D4); chốt bằng ADR trước `s5-2`.
 - Folder cũ `D:\AI engineer\tasklite` (có 3 commit của Antigravity) vẫn còn; user xóa khi không cần lịch sử đó.
 
 ## Trạng thái hiện tại
 
 - 2026-11-09: xong mốc `s0a` (Antigravity làm theo `documents/antigravity-task/01.TaskLite.md`, Claude đã chạy kiểm tra: đủ 4 tiêu chí `done`). Code ở `apps/tasklite/`, backlog 14 ticket ở `practice/backlog/`, đã lên Jira `TAS` (14 To Do, label tách đúng, tiếng Việt đúng dấu). Còn 3 lỗi nhỏ chưa sửa: so sánh user id lúc phân biệt hoa thường lúc không (`GET /projects/{id}` khác `GET /projects`), status dạng số `"1"` được chấp nhận, `createdAt` đọc lại từ SQLite mất `Z`. Việc kế tiếp: `s0b-1` (test).
+- 2026-11-10: xong mốc `s0b` (Antigravity làm `documents/antigravity-task/02.Foundation.md`, Claude chạy lại kiểm tra). 3 lỗi nhỏ của `s0a` đã sửa kèm test hồi quy. TaskLite có 34 test tích hợp (xUnit + WebApplicationFactory), Docker Compose (api 5200, web 4300), CI `tasklite-ci` xanh và ruleset `main` đã chứng minh chặn PR có test fail. Tài liệu: `docs/architecture/c4.md`, `docs/architecture/quality-attributes.md`, `docs/decisions/0000-template.md`. ADR mới 0001 (n8n + .NET trước). `s0b-4` (gate) chờ user tick trên viewer. Việc kế tiếp: `s1-1` (learn), rồi `s1-2` (core, user tự viết state machine).
 - Mẫu cập nhật: `YYYY-MM-DD: xong <mốc>; ADR mới <số>; việc kế tiếp <id>`.
 
 ## Bố cục repo
