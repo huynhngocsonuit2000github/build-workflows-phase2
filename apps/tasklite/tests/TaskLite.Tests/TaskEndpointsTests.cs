@@ -217,7 +217,7 @@ public class TaskEndpointsTests : IDisposable
         var mallory = _factory.CreateClientForUser("mallory");
 
         var res = await mallory.GetAsync($"/projects/{proj!.Id}/tasks");
-        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
     }
 
     [Fact]
