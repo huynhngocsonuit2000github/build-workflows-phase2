@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/tests/">
     <Project Path="tests/WorkflowApi.Domain.Tests/WorkflowApi.Domain.Tests.csproj" />
+    <Project Path="tests/WorkflowApi.Api.Tests/WorkflowApi.Api.Tests.csproj" />
   </Folder>
   <Project Path="src/WorkflowApi.Domain/WorkflowApi.Domain.csproj" />
+  <Project Path="src/WorkflowApi.Api/WorkflowApi.Api.csproj" />
 </Solution>
