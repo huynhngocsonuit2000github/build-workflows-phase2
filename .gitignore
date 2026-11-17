@@ -1,3 +1,6 @@
 apps/workflow-api**/obj/*
 apps/workflow-api/**/obj/*
 apps/workflow-api/**/bin/*
+
+infra/docker/.env
+**/.env

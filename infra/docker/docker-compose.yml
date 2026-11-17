@@ -1,0 +1,23 @@
+name: platform
+
+# PostgreSQL của nền tảng (Workflow API và các dịch vụ sau này). Cổng 5433 để không đụng PostgreSQL khác.
+# Mật khẩu lấy từ file .env (không commit). Tạo bằng: copy .env.example thành .env rồi đổi mật khẩu.
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-workflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in infra/docker/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-workflow}
+    volumes:
+      - platform-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-workflow} -d ${POSTGRES_DB:-workflow}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  platform-pgdata:
