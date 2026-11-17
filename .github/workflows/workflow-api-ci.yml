@@ -1,0 +1,51 @@
+name: workflow-api-ci
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/workflow-api/**'
+      - '.github/workflows/workflow-api-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'apps/workflow-api/**'
+      - '.github/workflows/workflow-api-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-api-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Workflow API Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore apps/workflow-api/WorkflowApi.slnx
+
+      - name: Build solution
+        run: dotnet build apps/workflow-api/WorkflowApi.slnx --no-restore -c Release -warnaserror
+
+      - name: Run tests
+        run: dotnet test apps/workflow-api/WorkflowApi.slnx --no-build -c Release --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-api-test-results
+          path: TestResults/
