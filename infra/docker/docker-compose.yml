@@ -1,7 +1,7 @@
 name: platform
 
-# PostgreSQL của nền tảng (Workflow API và các dịch vụ sau này). Cổng 5433 để không đụng PostgreSQL khác.
-# Mật khẩu lấy từ file .env (không commit). Tạo bằng: copy .env.example thành .env rồi đổi mật khẩu.
+# Hạ tầng local của nền tảng phase 2. Cổng tránh phase 1 (5678, 8787, 4200, 5154, 4201, 5155).
+# Bí mật lấy từ infra/docker/.env (không commit). Tạo bằng: copy .env.example thành .env rồi đổi mật khẩu.
 services:
   postgres:
     image: postgres:16-alpine
@@ -19,5 +19,45 @@ services:
       timeout: 3s
       retries: 10
 
+  # Workflow API: nguồn sự thật về trạng thái lần chạy. n8n gọi nó qua mạng nội bộ: http://workflow-api:8080
+  workflow-api:
+    build:
+      context: ../../apps/workflow-api
+    ports:
+      - "5300:8080"
+    environment:
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-workflow};Username=${POSTGRES_USER:-workflow};Password=${POSTGRES_PASSWORD}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  # n8n riêng của phase 2 (phase 1 dùng 5678). Chỉ điều phối, không giữ trạng thái lần chạy.
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.45.7
+    ports:
+      - "5679:5678"
+    environment:
+      N8N_PORT: "5678"
+      N8N_HOST: localhost
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5679/
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: Asia/Ho_Chi_Minh
+      TZ: Asia/Ho_Chi_Minh
+      WORKFLOW_API_URL: http://workflow-api:8080
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+    volumes:
+      - platform-n8n:/home/node/.n8n
+    depends_on:
+      workflow-api:
+        condition: service_healthy
+
 volumes:
   platform-pgdata:
+  platform-n8n:

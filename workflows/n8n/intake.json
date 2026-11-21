@@ -1,0 +1,239 @@
+{
+  "id": "wfIntakePhase2v1",
+  "name": "intake",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000001",
+      "name": "Jira webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "6f1c1a10-0001-4a00-9000-0000000000aa",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jira-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000002",
+      "name": "Create execution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKFLOW_API_URL }}/executions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'jira:' + ($json.body.issue?.key ?? 'missing') + ':' + ($json.headers['x-atlassian-webhook-identifier'] || $json.body.timestamp) }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jiraIssueKey: $json.body.issue?.key ?? null, actor: { type: 'N8n', id: 'n8n-intake' } }) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000003",
+      "name": "Created by API?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [480, 300],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 201,
+                    "operator": { "type": "number", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ok"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "rejected"
+        }
+      }
+    },
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000004",
+      "name": "Get current state",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 200],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.WORKFLOW_API_URL }}/executions/{{ $json.body.id }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000005",
+      "name": "Route by state",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [960, 200],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $json.body.currentState }}",
+                    "rightValue": "Created",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "needs analysis"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "already moving"
+        }
+      }
+    },
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000006",
+      "name": "Start requirement analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 100],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKFLOW_API_URL }}/executions/{{ $json.body.id }}/transitions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ toState: 'RequirementAnalysis', actor: { type: 'N8n', id: 'n8n-intake' }, expectedVersion: $json.body.version, reason: 'Jira intake' }) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000007",
+      "name": "Respond started",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 100],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ outcome: $json.statusCode === 200 ? 'started' : ($json.statusCode === 409 ? 'duplicate' : 'error'), executionId: $('Create execution').item.json.body.id, apiStatus: $json.statusCode, state: $json.body.currentState || null }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000008",
+      "name": "Respond duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ outcome: 'duplicate', executionId: $json.body.id, state: $json.body.currentState }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "6f1c1a10-0001-4a00-9000-000000000009",
+      "name": "Respond rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [720, 420],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ outcome: 'rejected', apiStatus: $json.statusCode, apiError: $json.body }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Jira webhook": {
+      "main": [[{ "node": "Create execution", "type": "main", "index": 0 }]]
+    },
+    "Create execution": {
+      "main": [[{ "node": "Created by API?", "type": "main", "index": 0 }]]
+    },
+    "Created by API?": {
+      "main": [
+        [{ "node": "Get current state", "type": "main", "index": 0 }],
+        [{ "node": "Respond rejected", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get current state": {
+      "main": [[{ "node": "Route by state", "type": "main", "index": 0 }]]
+    },
+    "Route by state": {
+      "main": [
+        [{ "node": "Start requirement analysis", "type": "main", "index": 0 }],
+        [{ "node": "Respond duplicate", "type": "main", "index": 0 }]
+      ]
+    },
+    "Start requirement analysis": {
+      "main": [[{ "node": "Respond started", "type": "main", "index": 0 }]]
+    }
+  }
+}
