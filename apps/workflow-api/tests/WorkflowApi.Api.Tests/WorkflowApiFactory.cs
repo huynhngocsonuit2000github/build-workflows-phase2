@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using WorkflowApi.Api.Data;
 using WorkflowApi.Api.Endpoints;
 
 namespace WorkflowApi.Api.Tests;
@@ -39,15 +42,33 @@ public sealed class WorkflowApiFactory : WebApplicationFactory<Program>
 
     public async Task<ExecutionResponse> CreateExecutionAsync(string key = "TAS-5")
     {
-        var client = CreateClient();
-        var res = await client.PostAsJsonAsync("/executions", new
+        var res = await PostExecutionAsync(new
         {
             jiraIssueKey = key,
             correlationId = "corr-test",
             actor = new { type = "N8n", id = "n8n" }
-        });
+        }, idempotencyKey: $"test:{Guid.NewGuid():N}");
         Assert.Equal(HttpStatusCode.Created, res.StatusCode);
         return (await res.Content.ReadFromJsonAsync<ExecutionResponse>())!;
+    }
+
+    /// <summary>POST /executions với header Idempotency-Key (null = không gửi header).</summary>
+    public Task<HttpResponseMessage> PostExecutionAsync(object body, string? idempotencyKey)
+    {
+        var message = new HttpRequestMessage(HttpMethod.Post, "/executions") { Content = JsonContent.Create(body) };
+        if (idempotencyKey is not null)
+        {
+            message.Headers.Add("Idempotency-Key", idempotencyKey);
+        }
+
+        return CreateClient().SendAsync(message);
+    }
+
+    public async Task<int> CountExecutionsAsync(string jiraIssueKey)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<WorkflowDbContext>();
+        return await db.Executions.CountAsync(e => e.JiraIssueKey == jiraIssueKey);
     }
 
     public Task<HttpResponseMessage> TransitionAsync(

@@ -1,4 +1,9 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using WorkflowApi.Api.Data;
 using WorkflowApi.Domain;
 
@@ -16,42 +21,127 @@ public static class ExecutionEndpoints
         group.MapPost("/{id:guid}/transitions", Transition);
     }
 
+    public const string IdempotencyKeyHeader = "Idempotency-Key";
+    public const string ReplayedHeader = "Idempotency-Replayed";
+
+    /// <summary>
+    /// Tạo lần chạy, idempotent theo header Idempotency-Key:
+    /// - key mới: tạo execution + lưu kết quả (cùng một transaction), trả 201;
+    /// - key đã có, cùng nội dung: trả lại NGUYÊN VĂN kết quả cũ (201, header Idempotency-Replayed: true), không tạo thêm;
+    /// - key đã có, khác nội dung: 422 IdempotencyKeyReused;
+    /// - hai request cùng key đến cùng lúc: unique index trên key cho một cái thắng, cái thua bắt lỗi và trả lại kết quả của cái thắng.
+    /// </summary>
     private static async Task<IResult> CreateExecution(
         CreateExecutionRequest request,
+        [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
+        HttpContext http,
         WorkflowDbContext db,
         TimeProvider clock,
         CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
 
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Trim().Length > 200)
+        {
+            errors[IdempotencyKeyHeader] = ["Idempotency-Key header is required and must be at most 200 characters."];
+        }
+
         if (string.IsNullOrWhiteSpace(request.JiraIssueKey) || request.JiraIssueKey.Trim().Length > 50)
         {
             errors["jiraIssueKey"] = ["jiraIssueKey is required and must be at most 50 characters."];
         }
 
-        var correlationId = string.IsNullOrWhiteSpace(request.CorrelationId)
-            ? Guid.NewGuid().ToString("N")
-            : request.CorrelationId.Trim();
-        if (correlationId.Length > 100)
+        var requestedCorrelationId = string.IsNullOrWhiteSpace(request.CorrelationId) ? null : request.CorrelationId.Trim();
+        if (requestedCorrelationId is { Length: > 100 })
         {
             errors["correlationId"] = ["correlationId must be at most 100 characters."];
         }
 
-        if (!TryParseActor(request.Actor, errors, out var actor))
+        if (!TryParseActor(request.Actor, errors, out var actor) || errors.Count > 0)
         {
             return Results.ValidationProblem(errors);
         }
 
-        if (errors.Count > 0)
+        var key = idempotencyKey!.Trim();
+        var jiraIssueKey = request.JiraIssueKey!.Trim();
+        var requestHash = HashRequest(jiraIssueKey, requestedCorrelationId, actor!);
+
+        // Đường nhanh: key đã có thì trả lại kết quả cũ, không chạm vào execution.
+        var existing = await db.IdempotencyRecords.AsNoTracking().FirstOrDefaultAsync(r => r.Key == key, ct);
+        if (existing is not null)
         {
-            return Results.ValidationProblem(errors);
+            return Replay(existing, requestHash, http);
         }
 
-        var execution = WorkflowExecution.Create(request.JiraIssueKey!, correlationId, actor!, clock.GetUtcNow().UtcDateTime);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var execution = WorkflowExecution.Create(
+            jiraIssueKey, requestedCorrelationId ?? Guid.NewGuid().ToString("N"), actor!, now);
+        var body = JsonSerializer.Serialize(ExecutionResponse.From(execution), JsonSerializerOptions.Web);
+
         db.Executions.Add(execution);
-        await db.SaveChangesAsync(ct);
+        db.IdempotencyRecords.Add(new IdempotencyRecord
+        {
+            Key = key,
+            RequestHash = requestHash,
+            ExecutionId = execution.Id,
+            StatusCode = StatusCodes.Status201Created,
+            ResponseBody = body,
+            CreatedAt = now
+        });
 
-        return Results.Created($"/executions/{execution.Id}", ExecutionResponse.From(execution));
+        try
+        {
+            // Execution và bản ghi idempotency lưu chung một transaction: hoặc có cả hai, hoặc không có gì.
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Một request cùng key vừa lưu trước (cả hai cùng qua "đường nhanh" lúc chưa có gì).
+            // Unique index chặn lại; transaction của mình rollback, execution của mình không tồn tại.
+            db.ChangeTracker.Clear();
+            var winner = await db.IdempotencyRecords.AsNoTracking().FirstAsync(r => r.Key == key, ct);
+            return Replay(winner, requestHash, http);
+        }
+
+        return StoredResult(body, StatusCodes.Status201Created, execution.Id, http, replayed: false);
+    }
+
+    private static IResult Replay(IdempotencyRecord record, string requestHash, HttpContext http)
+    {
+        if (record.RequestHash != requestHash)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status422UnprocessableEntity,
+                title: "Unprocessable Entity",
+                detail: "This Idempotency-Key was already used with a different request body. Use a new key.",
+                extensions: new Dictionary<string, object?> { ["error"] = "IdempotencyKeyReused" });
+        }
+
+        return StoredResult(record.ResponseBody, record.StatusCode, record.ExecutionId, http, replayed: true);
+    }
+
+    private static IResult StoredResult(string body, int statusCode, Guid executionId, HttpContext http, bool replayed)
+    {
+        http.Response.Headers.Location = $"/executions/{executionId}";
+        if (replayed)
+        {
+            http.Response.Headers[ReplayedHeader] = "true";
+        }
+
+        return Results.Content(body, "application/json", Encoding.UTF8, statusCode);
+    }
+
+    /// <summary>Băm nội dung đã chuẩn hóa (đã cắt khoảng trắng, loại actor viết đúng tên enum).</summary>
+    private static string HashRequest(string jiraIssueKey, string? correlationId, Actor actor)
+    {
+        var canonical = JsonSerializer.Serialize(new
+        {
+            jiraIssueKey,
+            correlationId,
+            actorType = actor.Type.ToString(),
+            actorId = actor.Id
+        });
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
     private static async Task<IResult> GetExecution(Guid id, WorkflowDbContext db, CancellationToken ct)

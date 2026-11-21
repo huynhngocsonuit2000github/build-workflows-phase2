@@ -6,6 +6,7 @@ namespace WorkflowApi.Api.Data;
 public class WorkflowDbContext(DbContextOptions<WorkflowDbContext> options) : DbContext(options)
 {
     public DbSet<WorkflowExecution> Executions => Set<WorkflowExecution>();
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,16 @@ public class WorkflowDbContext(DbContextOptions<WorkflowDbContext> options) : Db
             });
 
             b.Navigation(e => e.History).HasField("_history");
+        });
+
+        modelBuilder.Entity<IdempotencyRecord>(b =>
+        {
+            b.ToTable("IdempotencyRecords");
+            b.HasKey(r => r.Key); // khóa chính = unique index trên Idempotency-Key
+            b.Property(r => r.Key).HasMaxLength(200);
+            b.Property(r => r.RequestHash).IsRequired().HasMaxLength(64);
+            b.Property(r => r.ResponseBody).IsRequired(); // text, không jsonb: giữ nguyên từng byte để trả lại
+            b.HasOne<WorkflowExecution>().WithMany().HasForeignKey(r => r.ExecutionId);
         });
     }
 }

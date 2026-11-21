@@ -44,10 +44,21 @@ dotnet test WorkflowApi.slnx
 
 | Method | Route | Ý nghĩa | Mã trả về |
 |---|---|---|---|
-| POST | `/executions` | Tạo lần chạy (tạm, chưa idempotent; `Idempotency-Key` thêm ở `s1-4`) | 201, 400 |
+| POST | `/executions` | Tạo lần chạy; header `Idempotency-Key` bắt buộc (xem bên dưới) | 201, 400, 422 |
 | GET | `/executions/{id}` | Trạng thái hiện tại và `version` | 200, 404 |
 | GET | `/executions/{id}/history` | Lịch sử theo thời gian | 200, 404 |
 | POST | `/executions/{id}/transitions` | Chuyển trạng thái: `toState`, `actor`, `expectedVersion`, `reason` | 200, 400, 403, 404, 409, 422 |
+
+### Idempotency của `POST /executions`
+
+| Tình huống | Kết quả |
+|---|---|
+| Key mới | Tạo lần chạy, 201 |
+| Key đã dùng, cùng nội dung (đã cắt khoảng trắng) | Trả lại nguyên văn kết quả lần đầu, 201, header `Idempotency-Replayed: true`; không tạo thêm |
+| Key đã dùng, khác nội dung | 422, `error = IdempotencyKeyReused` |
+| Nhiều request cùng key đến cùng lúc | Unique index trên key cho một cái thắng; các cái khác nhận lại kết quả của nó |
+
+Key nên có dạng `jira:<issue>:<id sự kiện>` để mỗi sự kiện Jira chỉ tạo một lần chạy.
 
 Mã lỗi của chuyển trạng thái (trường `error` trong ProblemDetails):
 
@@ -60,4 +71,4 @@ Mã lỗi của chuyển trạng thái (trường `error` trong ProblemDetails):
 ## Giới hạn đã biết
 
 - **Chưa xác thực:** `actor` nằm trong body nên ai cũng tự nhận là `Human` được. Phải thay bằng danh tính từ token của dịch vụ (service token) trước khi cho người dùng thật dùng (`s7-2`, `s12`). Đừng mở API này ra ngoài máy local khi chưa làm.
-- `POST /executions` chưa chống tạo trùng: làm ở `s1-4`.
+- Bản ghi idempotency chưa hết hạn (giữ mãi). Khi dữ liệu lớn thì thêm job dọn theo `CreatedAt`.

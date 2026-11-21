@@ -4,7 +4,7 @@ namespace WorkflowApi.Api.Endpoints;
 
 public record ActorDto(string? Type, string? Id);
 
-/// <summary>Tạm thời, chưa idempotent. Idempotency-Key thêm ở s1-4.</summary>
+/// <summary>Đi kèm header bắt buộc Idempotency-Key (xem ExecutionEndpoints.CreateExecution).</summary>
 public record CreateExecutionRequest(string? JiraIssueKey, string? CorrelationId, ActorDto? Actor);
 
 public record TransitionRequestDto(string? ToState, ActorDto? Actor, long? ExpectedVersion, string? Reason);

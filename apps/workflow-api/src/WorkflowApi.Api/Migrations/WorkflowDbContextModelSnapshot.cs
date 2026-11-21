@@ -22,6 +22,37 @@ namespace WorkflowApi.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("WorkflowApi.Api.Data.IdempotencyRecord", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ResponseBody")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Key");
+
+                    b.HasIndex("ExecutionId");
+
+                    b.ToTable("IdempotencyRecords", (string)null);
+                });
+
             modelBuilder.Entity("WorkflowApi.Domain.WorkflowExecution", b =>
                 {
                     b.Property<Guid>("Id")
@@ -73,6 +104,15 @@ namespace WorkflowApi.Api.Migrations
                     b.HasIndex("JiraIssueKey");
 
                     b.ToTable("WorkflowExecutions", (string)null);
+                });
+
+            modelBuilder.Entity("WorkflowApi.Api.Data.IdempotencyRecord", b =>
+                {
+                    b.HasOne("WorkflowApi.Domain.WorkflowExecution", null)
+                        .WithMany()
+                        .HasForeignKey("ExecutionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("WorkflowApi.Domain.WorkflowExecution", b =>

@@ -33,12 +33,12 @@ public class ExecutionEndpointsTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task CreateExecution_ValidRequest_Returns201AtCreatedVersion1()
     {
-        var res = await _factory.CreateClient().PostAsJsonAsync("/executions", new
+        var res = await _factory.PostExecutionAsync(new
         {
             jiraIssueKey = "TAS-5",
             correlationId = "corr-1",
             actor = new { type = "N8n", id = "n8n" }
-        });
+        }, idempotencyKey: "jira:TAS-5:evt-1");
 
         Assert.Equal(HttpStatusCode.Created, res.StatusCode);
         var body = await res.Content.ReadFromJsonAsync<ExecutionResponse>();
@@ -58,11 +58,11 @@ public class ExecutionEndpointsTests(PostgresFixture postgres) : IAsyncLifetime
     [InlineData("TAS-5", "N8n", "")]
     public async Task CreateExecution_InvalidInput_Returns400(string key, string actorType, string actorId)
     {
-        var res = await _factory.CreateClient().PostAsJsonAsync("/executions", new
+        var res = await _factory.PostExecutionAsync(new
         {
             jiraIssueKey = key,
             actor = new { type = actorType, id = actorId }
-        });
+        }, idempotencyKey: $"test:{Guid.NewGuid():N}");
 
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
     }
