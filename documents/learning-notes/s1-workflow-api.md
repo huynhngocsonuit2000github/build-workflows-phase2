@@ -1,6 +1,6 @@
-# Ghi chú học: Mốc 3 · Workflow API (s1-1 → s1-4)
+# Ghi chú học: Mốc 3 · Workflow API (s1-1 → s1-5)
 
-> Tài liệu học cho chính mình: đã xây gì, vì sao, code nằm đâu, chạy thử thế nào. Cập nhật 2026-11-21.
+> Tài liệu học cho chính mình: đã xây gì, vì sao, code nằm đâu, chạy thử thế nào. Cập nhật 2026-11-22.
 > Thiết kế chính thức: `docs/architecture/workflow-states.md`. Cách dùng API: `apps/workflow-api/README.md`. Workflow n8n: `workflows/n8n/README.md`.
 
 ## 1. Bức tranh lớn: vì sao cần Workflow API
@@ -138,6 +138,62 @@ Jira webhook → Create execution → Created by API? ─ok─→ Get current st
 - Bước "Get current state" cần thiết vì khi gửi lại, `POST /executions` trả kết quả **gốc** (`Created`). Nếu lần trước tạo được nhưng n8n sập trước khi chuyển bước, hỏi trạng thái thật giúp tự phục hồi thay vì kẹt.
 - 5 webhook cùng lúc: `Idempotency-Key` cho một lần chạy; cả 5 cùng gọi chuyển trạng thái với `expectedVersion = 1`, concurrency token cho 1 cái thắng, 4 cái 409 thành `duplicate`.
 
+## 5b. s1-5 · Kiểm chứng bước 1: tìm lần chạy lỗi và retry an toàn
+
+Loại `eval`: không thêm tính năng lớn, mà **chứng minh** 5 tiêu chí của bước 1 bằng test, rồi phá code để chắc test bắt được lỗi.
+
+### Thêm 2 endpoint
+
+| Endpoint | Làm gì |
+|---|---|
+| `GET /executions?state=Failed` | Tìm lần chạy đang hỏng (lọc thêm `jiraIssueKey`, `limit`). Có index `(CurrentState, UpdatedAt)` cho truy vấn này |
+| `POST /executions/{id}/retry` | Body chỉ có `actor`, `expectedVersion`, `reason`. **Không có `toState`** |
+
+### Retry nằm ở đâu trong code
+
+`WorkflowStateMachine.Retry` (`src/WorkflowApi.Domain/WorkflowStateMachine.cs`):
+
+```csharp
+if (execution.Version != expectedVersion) return Reject(VersionConflict, ...);   // 409
+if (execution.CurrentState != Failed || execution.FailedFromState is null)
+    return Reject(NotAllowed, "Only a Failed execution can be retried");          // 422
+var request = new TransitionRequest(execution.FailedFromState.Value, actor, expectedVersion, reason ?? "Retry");
+return Apply(execution, request, now);   // vẫn qua 5 câu kiểm tra: actor phải là Human/N8n (403 nếu Agent)
+```
+
+Ba ý chính:
+- **Server chọn đích, không phải người gọi.** Đích luôn là `FailedFromState`, nên không ai retry "nhảy" sang `PullRequestCreated` được.
+- **Cùng một execution (cùng id).** Retry là một dòng chuyển trạng thái `Failed → Coding` trong lịch sử, không phải lần chạy mới. Lịch sử giữ cả dòng hỏng lẫn dòng retry, nên xem lại được chuyện gì đã xảy ra.
+- **An toàn khi gửi trùng.** n8n timeout rồi gửi lại cùng `expectedVersion` thì nhận 409, chỉ một lần có hiệu lực. 8 retry cùng lúc: concurrency token ở DB cho 1 cái thắng.
+
+Endpoint `Retry` dùng chung `SaveTransitionAsync` với `Transition` (lưu, bắt `DbUpdateConcurrencyException` thành 409).
+
+### Lỗi tạm thời và lỗi vĩnh viễn
+
+| Loại | Ví dụ | Ai xử lý |
+|---|---|---|
+| Tạm thời | Mạng chập, rate limit, nhà cung cấp LLM sập | Retry (người hoặc n8n; tự động có giới hạn ở `s8`) |
+| Vĩnh viễn | Ticket mơ hồ, hết 3 lượt sửa, sai quyền | Người xem lại, sửa đầu vào, hoặc `Cancelled`. Retry chỉ lặp lại lỗi |
+
+### 5 tiêu chí ↔ test (`Step1CriteriaTests.cs`)
+
+| Tiêu chí | Test chứng minh |
+|---|---|
+| 1. Trạng thái được lưu | Đọc lại bằng **kết nối DB riêng**, không qua API |
+| 2. Chuyển sai bị từ chối | Nhảy bước 422, sai người 403, sai version 409; trạng thái và lịch sử không đổi |
+| 3. Sự kiện trùng không tạo lần chạy trùng | 5 request cùng lúc + 1 gửi lại cùng key: 1 lần chạy |
+| 4. Xem được lịch sử | Đúng thứ tự, có người gửi |
+| 5. Lần chạy lỗi tìm được, retry an toàn | Tìm qua `?state=Failed`; retry 2 lần: 200 rồi 409; số lần chạy trong DB không tăng |
+
+### Phá code để kiểm tra test (mutation)
+
+| Phá thế này | Kết quả |
+|---|---|
+| Retry "ngây thơ" = tạo lần chạy mới | 10 test fail |
+| Bỏ concurrency token | Lần đầu test song song **vẫn pass** (1 vòng, các request chạy lần lượt nên không thật sự đua). Sửa test thành 10 vòng thì fail đúng: 8/8 thành công |
+
+Bài học: một test song song pass chưa chắc đã chứng minh gì. Phải phá thử code để thấy test có fail không.
+
 ## 6. Một webhook đi qua hệ thống (sequence)
 
 ```mermaid
@@ -191,6 +247,7 @@ Giao diện n8n: `http://localhost:5679` (lần đầu tạo tài khoản owner)
 | s1-2 | 84 test Domain; cho agent duyệt cổng yêu cầu thì 2 test fail đúng |
 | s1-3 | 8 request song song cùng version × 10 vòng: mỗi vòng đúng 1 thành công, 7 nhận 409; bỏ concurrency token thì 8/8 thành công (test fail đúng) |
 | s1-4 A | 10 test idempotency, 39 test API pass; phá code như bảng ở mục 5 |
+| s1-5 | 101 test Domain + 65 test API pass; 5 test `Step1CriteriaTests` cho 5 tiêu chí; 2 mutation đều bị bắt |
 | s1-4 B | Webhook thật qua n8n: gửi trùng ra `duplicate`, giả lập timeout ra `started` với lần chạy cũ, 5 webhook cùng lúc ra 1 `started` + 4 `duplicate`; DB mỗi issue đúng 1 lần chạy |
 
 ## 9. Giới hạn đã biết
@@ -207,3 +264,5 @@ Giao diện n8n: `http://localhost:5679` (lần đầu tạo tài khoản owner)
 3. Vì sao lưu lần chạy và dòng `IdempotencyRecords` chung một transaction?
 4. Vì sao workflow n8n phải gọi `GET /executions/{id}` thay vì tin câu trả lời của `POST /executions`?
 5. Cùng một `Idempotency-Key` nhưng `jiraIssueKey` khác: API trả gì, và vì sao không lặng lẽ trả lần chạy cũ?
+6. Vì sao `POST /retry` không cho người gọi truyền `toState`?
+7. Retry tạo lần chạy mới (id mới) thì mất gì? (Gợi ý: lịch sử, idempotency của Jira, PR đang mở.)
