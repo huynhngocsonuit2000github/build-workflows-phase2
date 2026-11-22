@@ -9,4 +9,5 @@ public sealed record LlmRequest(
     string? ModelOverride = null,
     double? Temperature = null,
     int? MaxOutputTokens = null,
-    string? CorrelationId = null);
+    string? CorrelationId = null,
+    bool JsonOutput = false);

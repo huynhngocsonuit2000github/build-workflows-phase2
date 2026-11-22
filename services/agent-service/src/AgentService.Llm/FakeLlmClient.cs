@@ -24,7 +24,8 @@ public sealed class FakeLlmClient : ILlmClient
         string? model = null,
         int? inputTokens = null,
         int? outputTokens = null,
-        TimeSpan? latency = null)
+        TimeSpan? latency = null,
+        string? finishReason = null)
     {
         _handlers.Enqueue(req => Task.FromResult(new LlmResponse(
             Text: text,
@@ -33,7 +34,8 @@ public sealed class FakeLlmClient : ILlmClient
             Attempts: 1,
             InputTokens: inputTokens ?? 10,
             OutputTokens: outputTokens ?? 20,
-            Latency: latency ?? TimeSpan.FromMilliseconds(5))));
+            Latency: latency ?? TimeSpan.FromMilliseconds(5),
+            FinishReason: finishReason)));
     }
 
     public void EnqueueException(Exception exception)

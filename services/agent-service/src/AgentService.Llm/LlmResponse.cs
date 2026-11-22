@@ -10,4 +10,5 @@ public sealed record LlmResponse(
     int Attempts,
     int? InputTokens,
     int? OutputTokens,
-    TimeSpan Latency);
+    TimeSpan Latency,
+    string? FinishReason = null);

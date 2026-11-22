@@ -122,12 +122,13 @@ public class GeminiLlmClient : ILlmClient
             Parts = [new GeminiPart { Text = request.UserPrompt }]
         });
 
-        if (request.Temperature.HasValue || request.MaxOutputTokens.HasValue)
+        if (request.Temperature.HasValue || request.MaxOutputTokens.HasValue || request.JsonOutput)
         {
             payload.GenerationConfig = new GeminiGenerationConfig
             {
                 Temperature = request.Temperature,
-                MaxOutputTokens = request.MaxOutputTokens
+                MaxOutputTokens = request.MaxOutputTokens,
+                ResponseMimeType = request.JsonOutput ? "application/json" : null
             };
         }
 
@@ -229,7 +230,8 @@ public class GeminiLlmClient : ILlmClient
             Attempts: 1,
             InputTokens: inputTokens,
             OutputTokens: outputTokens,
-            Latency: latency);
+            Latency: latency,
+            FinishReason: candidate.FinishReason);
     }
 
     public static LlmErrorKind MapStatusCodeToErrorKind(int statusCode) => statusCode switch
@@ -340,6 +342,9 @@ public class GeminiLlmClient : ILlmClient
 
         [JsonPropertyName("maxOutputTokens")]
         public int? MaxOutputTokens { get; set; }
+
+        [JsonPropertyName("responseMimeType")]
+        public string? ResponseMimeType { get; set; }
     }
 
     internal sealed class GeminiResponsePayload

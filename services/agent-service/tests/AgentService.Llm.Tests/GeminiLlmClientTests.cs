@@ -194,4 +194,147 @@ public class GeminiLlmClientTests
         Assert.True(ex.Retryable);
         Assert.IsType<HttpRequestException>(ex.InnerException);
     }
+
+    [Fact]
+    public async Task CompleteAsync_FinishReason_PopulatedInResponse()
+    {
+        // Arrange
+        var mockHandler = new MockHttpMessageHandler();
+        var json = """
+        {
+          "candidates": [
+            {
+              "content": {
+                "parts": [{ "text": "{\"result\": \"success\"}" }]
+              },
+              "finishReason": "STOP"
+            }
+          ]
+        }
+        """;
+        mockHandler.EnqueueResponse(HttpStatusCode.OK, json);
+
+        using var httpClient = new HttpClient(mockHandler);
+        var client = new GeminiLlmClient(httpClient, Options.Create(_defaultOptions));
+        var request = new LlmRequest("System", "User");
+
+        // Act
+        var response = await client.CompleteAsync(request);
+
+        // Assert
+        Assert.Equal("STOP", response.FinishReason);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_MaxTokensFinishReason_ReturnsSuccessWithFinishReason()
+    {
+        // Arrange
+        var mockHandler = new MockHttpMessageHandler();
+        var json = """
+        {
+          "candidates": [
+            {
+              "content": {
+                "parts": [{ "text": "Truncated content..." }]
+              },
+              "finishReason": "MAX_TOKENS"
+            }
+          ]
+        }
+        """;
+        mockHandler.EnqueueResponse(HttpStatusCode.OK, json);
+
+        using var httpClient = new HttpClient(mockHandler);
+        var client = new GeminiLlmClient(httpClient, Options.Create(_defaultOptions));
+        var request = new LlmRequest("System", "User");
+
+        // Act
+        var response = await client.CompleteAsync(request);
+
+        // Assert: MAX_TOKENS must NOT throw in GeminiLlmClient, it returns LlmResponse with FinishReason
+        Assert.Equal("MAX_TOKENS", response.FinishReason);
+        Assert.Equal("Truncated content...", response.Text);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_JsonOutputTrue_IncludesResponseMimeTypeInPayload()
+    {
+        // Arrange
+        var mockHandler = new MockHttpMessageHandler();
+        string? capturedBody = null;
+        mockHandler.EnqueueHandler(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""
+                {
+                  "candidates": [{
+                    "content": { "parts": [{ "text": "{}" }] },
+                    "finishReason": "STOP"
+                  }]
+                }
+                """, System.Text.Encoding.UTF8, "application/json")
+            };
+        });
+
+        using var httpClient = new HttpClient(mockHandler);
+        var client = new GeminiLlmClient(httpClient, Options.Create(_defaultOptions));
+        var request = new LlmRequest("System", "User", JsonOutput: true);
+
+        // Act
+        await client.CompleteAsync(request);
+
+        // Assert
+        Assert.NotNull(capturedBody);
+        Assert.Contains("\"responseMimeType\":\"application/json\"", capturedBody);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_JsonOutputFalse_DoesNotIncludeResponseMimeTypeInPayload()
+    {
+        // Arrange
+        var mockHandler = new MockHttpMessageHandler();
+        string? capturedBody = null;
+        mockHandler.EnqueueHandler(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""
+                {
+                  "candidates": [{
+                    "content": { "parts": [{ "text": "plain text" }] },
+                    "finishReason": "STOP"
+                  }]
+                }
+                """, System.Text.Encoding.UTF8, "application/json")
+            };
+        });
+
+        using var httpClient = new HttpClient(mockHandler);
+        var client = new GeminiLlmClient(httpClient, Options.Create(_defaultOptions));
+        var request = new LlmRequest("System", "User", JsonOutput: false);
+
+        // Act
+        await client.CompleteAsync(request);
+
+        // Assert
+        Assert.NotNull(capturedBody);
+        Assert.DoesNotContain("responseMimeType", capturedBody);
+    }
+
+    [Fact]
+    public async Task FakeLlmClient_SupportsFinishReason()
+    {
+        // Arrange
+        var fake = new FakeLlmClient();
+        fake.EnqueueResponse("Hello", finishReason: "MAX_TOKENS");
+
+        // Act
+        var response = await fake.CompleteAsync(new LlmRequest("sys", "user"));
+
+        // Assert
+        Assert.Equal("MAX_TOKENS", response.FinishReason);
+    }
 }

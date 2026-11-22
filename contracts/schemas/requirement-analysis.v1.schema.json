@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.build-workflows.local/schemas/requirement-analysis.v1.schema.json",
+  "title": "Bản phân tích yêu cầu phần mềm",
+  "description": "Schema định dạng kết quả phân tích yêu cầu từ ticket bởi AI BA",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "userStory",
+    "acceptanceCriteria",
+    "openQuestions",
+    "assumptions"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600,
+      "title": "Tóm tắt yêu cầu",
+      "description": "Tóm tắt ngắn gọn nội dung và mục tiêu chính của ticket (1–600 ký tự, không toàn khoảng trắng)."
+    },
+    "userStory": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600,
+      "title": "User Story",
+      "description": "Mô tả giá trị người dùng dưới dạng câu chuyện người dùng (1–600 ký tự)."
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "title": "Tiêu chí chấp nhận",
+      "description": "Danh sách các tiêu chí chấp nhận đo lường và kiểm tra được (1–20 mục, mỗi mục 1–500 ký tự).",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "openQuestions": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 20,
+      "title": "Câu hỏi mở",
+      "description": "Danh sách các câu hỏi làm rõ điểm mơ hồ, mâu thuẫn hoặc nội dung đáng ngờ (0–20 mục, mỗi mục 1–500 ký tự).",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 20,
+      "title": "Giả định",
+      "description": "Danh sách các giả định được đưa ra trong quá trình phân tích (0–20 mục, mỗi mục 1–500 ký tự).",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    }
+  }
+}
