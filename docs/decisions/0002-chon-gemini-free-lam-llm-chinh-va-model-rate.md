@@ -83,6 +83,7 @@ Chọn A vì mục tiêu hiện tại là học và đo, dữ liệu chỉ là t
 - Giá, giới hạn context, mô tả và điều khoản Free/Paid: các trang trong mục "Nguồn", đọc ngày 2026-11-22.
 - Ước chi phí ở trên là phép tính tay từ giá nêu trên, chưa phải số đo. Số đo thật: `tests/evaluation/` ở `s2-4` (chưa có).
 - Rate limit gói Free của project: **chưa có** (cần user lấy từ AI Studio).
+- Cập nhật 2026-11-22 (chỉ thêm link, nội dung quyết định không đổi): số rate limit đã ghi tại [evidence/0002-gemini-free-rate-limits.md](evidence/0002-gemini-free-rate-limits.md).
 
 ## Nguồn
 
