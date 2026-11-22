@@ -83,4 +83,34 @@ public static class WorkflowStateMachine
         execution.Commit(request.To, request.Actor, request.Reason, now);
         return TransitionResult.Ok();
     }
+
+    /// <summary>
+    /// Retry một lần chạy đang Failed: quay về đúng trạng thái đã hỏng (FailedFromState).
+    /// Người gọi không chọn đích, nên không retry nhầm chỗ. Vẫn đi qua <see cref="Apply"/>
+    /// nên vẫn kiểm version, loại actor (Human, N8n) và ghi lịch sử. Không tạo lần chạy mới.
+    /// </summary>
+    public static TransitionResult Retry(
+        WorkflowExecution execution, Actor actor, long expectedVersion, string? reason, DateTime now)
+    {
+        ArgumentNullException.ThrowIfNull(execution);
+        ArgumentNullException.ThrowIfNull(actor);
+
+        if (execution.Version != expectedVersion)
+        {
+            return TransitionResult.Reject(
+                TransitionError.VersionConflict,
+                $"Expected version {expectedVersion} but current is {execution.Version}.");
+        }
+
+        if (execution.CurrentState != WorkflowState.Failed || execution.FailedFromState is null)
+        {
+            return TransitionResult.Reject(
+                TransitionError.NotAllowed,
+                $"Only a Failed execution can be retried; current state is {execution.CurrentState}.");
+        }
+
+        var request = new TransitionRequest(
+            execution.FailedFromState.Value, actor, expectedVersion, string.IsNullOrWhiteSpace(reason) ? "Retry" : reason);
+        return Apply(execution, request, now);
+    }
 }

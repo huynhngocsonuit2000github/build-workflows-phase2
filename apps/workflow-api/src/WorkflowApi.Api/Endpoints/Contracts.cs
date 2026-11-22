@@ -9,6 +9,18 @@ public record CreateExecutionRequest(string? JiraIssueKey, string? CorrelationId
 
 public record TransitionRequestDto(string? ToState, ActorDto? Actor, long? ExpectedVersion, string? Reason);
 
+/// <summary>Retry không có toState: server tự quay về trạng thái đã hỏng.</summary>
+public record RetryRequestDto(ActorDto? Actor, long? ExpectedVersion, string? Reason);
+
+/// <summary>Một dòng của GET /executions (danh sách gọn).</summary>
+public record ExecutionSummary(
+    Guid Id,
+    string JiraIssueKey,
+    string CurrentState,
+    long Version,
+    string? FailedFromState,
+    DateTime UpdatedAt);
+
 public record ExecutionResponse(
     Guid Id,
     string JiraIssueKey,

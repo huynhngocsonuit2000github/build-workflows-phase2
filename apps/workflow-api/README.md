@@ -45,9 +45,11 @@ dotnet test WorkflowApi.slnx
 | Method | Route | Ý nghĩa | Mã trả về |
 |---|---|---|---|
 | POST | `/executions` | Tạo lần chạy; header `Idempotency-Key` bắt buộc (xem bên dưới) | 201, 400, 422 |
+| GET | `/executions?state=Failed&jiraIssueKey=TAS-5&limit=50` | Tìm lần chạy theo trạng thái / issue (mọi tham số tùy chọn; mới cập nhật trước; `limit` 1–200, mặc định 50) | 200, 400 |
 | GET | `/executions/{id}` | Trạng thái hiện tại và `version` | 200, 404 |
 | GET | `/executions/{id}/history` | Lịch sử theo thời gian | 200, 404 |
 | POST | `/executions/{id}/transitions` | Chuyển trạng thái: `toState`, `actor`, `expectedVersion`, `reason` | 200, 400, 403, 404, 409, 422 |
+| POST | `/executions/{id}/retry` | Retry lần chạy `Failed`: `actor` (Human, N8n), `expectedVersion`, `reason`. Không có `toState`: tự quay về `failedFromState`, cùng id, không tạo lần chạy mới | 200, 400, 403, 404, 409, 422 |
 
 ### Idempotency của `POST /executions`
 
@@ -67,6 +69,31 @@ Mã lỗi của chuyển trạng thái (trường `error` trong ProblemDetails):
 | 409 | `VersionConflict` | `expectedVersion` cũ, hoặc ai đó ghi trước (phát hiện ở DB) |
 | 403 | `ActorNotAllowed` | Loại actor không được kích hoạt chuyển này |
 | 422 | `NotAllowed`, `TerminalState`, `GuardFailed` | Chuyển không có trong bảng, đã ở trạng thái cuối, hết lượt vòng lặp |
+
+## Bằng chứng bước 1 (`s1-5`)
+
+Mỗi tiêu chí có một test đi qua API thật + PostgreSQL thật trong `tests/WorkflowApi.Api.Tests/Step1CriteriaTests.cs`:
+
+```bash
+dotnet test tests/WorkflowApi.Api.Tests --filter "FullyQualifiedName~Step1CriteriaTests"
+```
+
+| Tiêu chí | Test chính | Ca chi tiết hơn |
+|---|---|---|
+| 1. Trạng thái được lưu | `Criterion1_StateIsPersisted_ReadBackByIndependentDbConnection` (đọc lại bằng kết nối DB riêng, không qua API) | `GetExecution_Existing_ReturnsPersistedState`, `Transition_ValidStep_Returns200AndPersistsNewVersion` |
+| 2. Chuyển sai bị từ chối | `Criterion2_InvalidTransitionsAreRejected_AndNothingIsWritten` (nhảy bước 422, sai người 403, sai version 409; trạng thái và lịch sử không đổi) | `Transition_*` trong `ExecutionEndpointsTests`, `ConcurrencyTests`, 101 test Domain |
+| 3. Sự kiện trùng không tạo lần chạy trùng | `Criterion3_DuplicateEventsDoNotCreateDuplicateRuns` (5 request cùng lúc + 1 gửi lại, cùng key: 1 lần chạy) | `IdempotencyTests` |
+| 4. Xem được lịch sử | `Criterion4_HistoryIsInspectable_InOrderWithActorAndReason` | `GetHistory_*` |
+| 5. Lần chạy lỗi tìm được và retry an toàn | `Criterion5_FailedRunCanBeFoundAndSafelyRetried_WithoutCreatingANewRun` | `RetryAndListTests` (17 ca: 403, 409, 422, gửi trùng, 8 retry song song × 10 vòng) |
+
+Kiểm tra test có bắt được lỗi thật không (mutation, 2026-11-22):
+
+| Phá code thế này | Kết quả |
+|---|---|
+| Retry "ngây thơ": tạo lần chạy mới thay vì quay lại lần cũ | 10 test fail, gồm `Criterion5` và `Retry_Failed_DoesNotCreateNewRun` |
+| Bỏ `IsConcurrencyToken()` trên `Version` | `Retry_ParallelSameVersion_ExactlyOneSucceeds` fail: 8/8 retry cùng thành công (mong đợi 1) |
+
+Lỗi tạm thời và lỗi vĩnh viễn: hệ thống (`System`) đánh `Failed` kèm `reason`; người hoặc n8n quyết định retry. Retry chỉ hợp lý khi nguyên nhân là tạm thời (mạng, rate limit, nhà cung cấp sập); lỗi vĩnh viễn (ticket sai, hết lượt sửa) thì người xử lý hoặc `Cancelled`. Retry tự động có giới hạn số lần sẽ làm ở `s8` (hàng đợi).
 
 ## Giới hạn đã biết
 

@@ -433,6 +433,101 @@ public class WorkflowStateMachineTests
         }
     }
 
+    // ---- Retry (không chọn đích, server tự quay về FailedFromState) ----
+
+    [Fact]
+    public void Retry_FailedExecution_ReturnsToFailedFromStateSameExecution()
+    {
+        var e = FailedExecution();
+        var id = e.Id;
+        var version = e.Version;
+
+        var result = WorkflowStateMachine.Retry(e, Human, e.Version, null, Now);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(id, e.Id);
+        Assert.Equal(WorkflowState.Coding, e.CurrentState);
+        Assert.Null(e.FailedFromState);
+        Assert.Equal(version + 1, e.Version);
+        var last = e.History[^1];
+        Assert.Equal(WorkflowState.Failed, last.FromState);
+        Assert.Equal(WorkflowState.Coding, last.ToState);
+        Assert.Equal("Retry", last.Reason);
+    }
+
+    [Theory]
+    [MemberData(nameof(NonTerminalStates), MemberType = typeof(TestHelpers))]
+    public void Retry_NotFailed_NotAllowedAndNothingChanges(WorkflowState state)
+    {
+        if (state == WorkflowState.Failed)
+        {
+            return;
+        }
+
+        var e = At(state);
+        var before = (e.CurrentState, e.Version, e.History.Count);
+
+        var result = WorkflowStateMachine.Retry(e, Human, e.Version, null, Now);
+
+        Assert.Equal(TransitionError.NotAllowed, result.Error);
+        Assert.Equal(before, (e.CurrentState, e.Version, e.History.Count));
+    }
+
+    [Fact]
+    public void Retry_CompletedExecution_NotAllowed()
+    {
+        var e = At(WorkflowState.Completed);
+
+        var result = WorkflowStateMachine.Retry(e, Human, e.Version, null, Now);
+
+        Assert.Equal(TransitionError.NotAllowed, result.Error);
+        Assert.Equal(WorkflowState.Completed, e.CurrentState);
+    }
+
+    [Fact]
+    public void Retry_StaleVersion_VersionConflict()
+    {
+        var e = FailedExecution();
+
+        var result = WorkflowStateMachine.Retry(e, Human, e.Version - 1, null, Now);
+
+        Assert.Equal(TransitionError.VersionConflict, result.Error);
+        Assert.Equal(WorkflowState.Failed, e.CurrentState);
+    }
+
+    [Fact]
+    public void Retry_ByAgentOrSystem_ActorNotAllowed()
+    {
+        var e = FailedExecution();
+
+        Assert.Equal(TransitionError.ActorNotAllowed, WorkflowStateMachine.Retry(e, Agent, e.Version, null, Now).Error);
+        Assert.Equal(TransitionError.ActorNotAllowed, WorkflowStateMachine.Retry(e, Sys, e.Version, null, Now).Error);
+        Assert.Equal(WorkflowState.Failed, e.CurrentState);
+    }
+
+    [Fact]
+    public void Retry_ByN8n_Allowed()
+    {
+        var e = FailedExecution();
+
+        Assert.True(WorkflowStateMachine.Retry(e, N8n, e.Version, "auto retry", Now).Succeeded);
+        Assert.Equal("auto retry", e.History[^1].Reason);
+    }
+
+    [Fact]
+    public void Retry_SameRequestTwice_SecondIsVersionConflict()
+    {
+        var e = FailedExecution();
+        var version = e.Version;
+
+        var first = WorkflowStateMachine.Retry(e, Human, version, null, Now);
+        var second = WorkflowStateMachine.Retry(e, Human, version, null, Now);
+
+        Assert.True(first.Succeeded);
+        Assert.Equal(TransitionError.VersionConflict, second.Error);
+        Assert.Single(e.History, h => h.FromState == WorkflowState.Failed);
+    }
+
     private static WorkflowExecution FailedExecution()
     {
         var e = At(WorkflowState.Coding);

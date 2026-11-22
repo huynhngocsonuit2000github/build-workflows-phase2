@@ -81,6 +81,43 @@ public sealed class WorkflowApiFactory : WebApplicationFactory<Program>
             reason
         });
 
+    public Task<HttpResponseMessage> RetryAsync(
+        Guid id, string actorType, long expectedVersion, string? reason = null, string actorId = "tester") =>
+        CreateClient().PostAsJsonAsync($"/executions/{id}/retry", new
+        {
+            actor = new { type = actorType, id = actorId },
+            expectedVersion,
+            reason
+        });
+
+    /// <summary>GET /executions với query string thô, ví dụ "state=Failed".</summary>
+    public async Task<List<ExecutionSummary>> ListAsync(string query)
+    {
+        var res = await CreateClient().GetAsync($"/executions?{query}");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        return (await res.Content.ReadFromJsonAsync<List<ExecutionSummary>>())!;
+    }
+
+    public async Task<int> CountAllExecutionsAsync()
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<WorkflowDbContext>();
+        return await db.Executions.CountAsync();
+    }
+
+    /// <summary>Tạo lần chạy, đi đến Coding rồi cho hệ thống đánh Failed (FailedFromState = Coding).</summary>
+    public async Task<ExecutionResponse> CreateFailedAtCodingAsync(string key = "TAS-5")
+    {
+        var created = await CreateExecutionAsync(key);
+        return await AdvanceAsync(
+            created,
+            ("RequirementAnalysis", "N8n"),
+            ("AwaitingRequirementApproval", "Agent"),
+            ("ImplementationPlanning", "Human"),
+            ("Coding", "Agent"),
+            ("Failed", "System"));
+    }
+
     public async Task<ExecutionResponse> GetAsync(Guid id)
     {
         var res = await CreateClient().GetAsync($"/executions/{id}");

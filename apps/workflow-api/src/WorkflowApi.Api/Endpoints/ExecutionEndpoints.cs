@@ -16,10 +16,15 @@ public static class ExecutionEndpoints
         var group = app.MapGroup("/executions");
 
         group.MapPost("/", CreateExecution);
+        group.MapGet("/", ListExecutions);
         group.MapGet("/{id:guid}", GetExecution);
         group.MapGet("/{id:guid}/history", GetHistory);
         group.MapPost("/{id:guid}/transitions", Transition);
+        group.MapPost("/{id:guid}/retry", Retry);
     }
+
+    public const int DefaultListLimit = 50;
+    public const int MaxListLimit = 200;
 
     public const string IdempotencyKeyHeader = "Idempotency-Key";
     public const string ReplayedHeader = "Idempotency-Replayed";
@@ -208,6 +213,106 @@ public static class ExecutionEndpoints
             new TransitionRequest(toState, actor!, request.ExpectedVersion!.Value, request.Reason),
             clock.GetUtcNow().UtcDateTime);
 
+        return await SaveTransitionAsync(execution, result, db, ct);
+    }
+
+    /// <summary>
+    /// Retry lần chạy đang Failed. Không nhận toState: server tự quay về FailedFromState.
+    /// Cùng một execution (cùng id), không tạo lần chạy mới. Hai retry cùng lúc: một 200, một 409.
+    /// </summary>
+    private static async Task<IResult> Retry(
+        Guid id,
+        RetryRequestDto request,
+        WorkflowDbContext db,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (request.ExpectedVersion is null)
+        {
+            errors["expectedVersion"] = ["expectedVersion is required."];
+        }
+
+        if (request.Reason is { Length: > 1000 })
+        {
+            errors["reason"] = ["reason must be at most 1000 characters."];
+        }
+
+        if (!TryParseActor(request.Actor, errors, out var actor) || errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var execution = await db.Executions.FirstOrDefaultAsync(e => e.Id == id, ct);
+        if (execution is null)
+        {
+            return NotFound(id);
+        }
+
+        var result = WorkflowStateMachine.Retry(
+            execution, actor!, request.ExpectedVersion!.Value, request.Reason, clock.GetUtcNow().UtcDateTime);
+
+        return await SaveTransitionAsync(execution, result, db, ct);
+    }
+
+    /// <summary>
+    /// Tìm lần chạy theo trạng thái (ví dụ ?state=Failed) và/hoặc issue. Mới cập nhật nằm trước.
+    /// </summary>
+    private static async Task<IResult> ListExecutions(
+        string? state,
+        string? jiraIssueKey,
+        int? limit,
+        WorkflowDbContext db,
+        CancellationToken ct)
+    {
+        var errors = new Dictionary<string, string[]>();
+        WorkflowState parsedState = default;
+
+        if (state is not null && !TryParseState(state, out parsedState))
+        {
+            errors["state"] = [$"state must be one of: {string.Join(", ", Enum.GetNames<WorkflowState>())}."];
+        }
+
+        var take = limit ?? DefaultListLimit;
+        if (take is < 1 or > MaxListLimit)
+        {
+            errors["limit"] = [$"limit must be between 1 and {MaxListLimit}."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var query = db.Executions.AsNoTracking();
+        if (state is not null)
+        {
+            query = query.Where(e => e.CurrentState == parsedState);
+        }
+
+        if (!string.IsNullOrWhiteSpace(jiraIssueKey))
+        {
+            var issue = jiraIssueKey.Trim();
+            query = query.Where(e => e.JiraIssueKey == issue);
+        }
+
+        var rows = await query
+            .OrderByDescending(e => e.UpdatedAt)
+            .ThenBy(e => e.Id)
+            .Take(take)
+            .Select(e => new ExecutionSummary(
+                e.Id, e.JiraIssueKey, e.CurrentState.ToString(), e.Version,
+                e.FailedFromState == null ? null : e.FailedFromState.ToString(), e.UpdatedAt))
+            .ToListAsync(ct);
+
+        return Results.Ok(rows);
+    }
+
+    /// <summary>Lưu kết quả của state machine; bắt va chạm ghi ở DB thành 409.</summary>
+    private static async Task<IResult> SaveTransitionAsync(
+        WorkflowExecution execution, TransitionResult result, WorkflowDbContext db, CancellationToken ct)
+    {
         if (!result.Succeeded)
         {
             return Rejected(result);

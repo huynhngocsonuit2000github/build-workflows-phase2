@@ -28,6 +28,7 @@ public class WorkflowDbContext(DbContextOptions<WorkflowDbContext> options) : Db
 
             b.HasIndex(e => e.JiraIssueKey);
             b.HasIndex(e => e.CorrelationId);
+            b.HasIndex(e => new { e.CurrentState, e.UpdatedAt }); // GET /executions?state=Failed
 
             b.OwnsMany(e => e.History, h =>
             {

@@ -103,6 +103,8 @@ namespace WorkflowApi.Api.Migrations
 
                     b.HasIndex("JiraIssueKey");
 
+                    b.HasIndex("CurrentState", "UpdatedAt");
+
                     b.ToTable("WorkflowExecutions", (string)null);
                 });
 
